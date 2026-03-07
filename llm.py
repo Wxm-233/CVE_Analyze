@@ -36,6 +36,7 @@ Your output:
 
 SYSTEM_MESSAGE = """
 You are a professional Linux developer and Linux analyzer.
+Respond with strict JSON as requested in the prompt. No extra commentary.
 """
 
 class LLMQuery():
