@@ -11,7 +11,7 @@ import subprocess
 from pathlib import Path
 from datetime import datetime
 import argparse
-from cveCrossScopes import get_linux_cve_details
+from cve_cross_scopes import get_linux_cve_details
 
 # 架构相关关键词（可以扩展）
 ARCH_KEYWORDS = [

@@ -5,7 +5,7 @@ from typing import Optional
 
 def find_function_definition(function_name: str, src_root: str, max_lines: int = 400) -> Optional[str]:
     """
-    在 src_root 下递归搜索可能包含 function_name 的 .c/.h 文件（先用简单的 grep）
+    在 src_root 下递归搜索可能包含 function_name 的 .c/.h 文件(先用简单的 grep)
     然后尝试从发现的文件中提取函数实现体（基于花括号配对）。
     返回文本（函数定义），若找不到则返回 None。
     """
