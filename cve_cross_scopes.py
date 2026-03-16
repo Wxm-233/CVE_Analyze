@@ -6,12 +6,12 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 # linux-cve-announce git 仓库克隆在当前目录 ./linux-cve-announce
-LORE_REPO = os.environ.get("LORE_REPO", "linux-cve-announce")
+LORE_REPO = os.environ.get("LORE_REPO", "linux-cve-announce/git/0.git")
 
 def _git_show_commit_by_grep(repo_path: str, cve_id: str) -> Optional[str]:
     """在 repo_path 的 git log 中查找包含 CVE ID 的最新提交正文(message+body)"""
     try:
-        cmd = ["git", "-C", repo_path, "log", "--grep", cve_id, "-n", "1", "--pretty=format:%B"]
+        cmd = ["git", "--git-dir", repo_path, "log", "--all", "--grep", cve_id, "-n", "1", "--pretty=format:%B"]
         out = subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL)
         return out.strip()
     except subprocess.CalledProcessError:

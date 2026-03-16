@@ -1,6 +1,7 @@
 # llm_safe.py
 import os
 import json
+import ast
 from openai import OpenAI  # 按你环境使用的 SDK 调整
 from typing import Optional
 
@@ -39,8 +40,11 @@ class LLMQuery:
                     {"role": "system", "content": SYSTEM_MESSAGE},
                     {"role": "user", "content": user_message},
                 ],
-                max_tokens=1024,
-                temperature=0.0
+                max_tokens=4096,
+                temperature=0.7,
+                top_p=1,
+                frequency_penalty=0,
+                presence_penalty=0,
             )
             text = resp.choices[0].message.content.strip()
             # 尝试把 text 当成 JSON parse
@@ -48,14 +52,10 @@ class LLMQuery:
                 parsed = json.loads(text)
                 return parsed
             except json.JSONDecodeError:
-                # 如果不是严格 JSON，可尝试从中抽出 {...}
-                import re
-                m = re.search(r'(\{.*\})', text, flags=re.DOTALL)
-                if m:
-                    try:
-                        return json.loads(m.group(1))
-                    except:
-                        return {"error": "invalid_json", "raw": text}
-                return {"error": "not_json", "raw": text}
+                try:
+                    parsed = ast.literal_eval(text)
+                    return parsed
+                except Exception:
+                    return {"error": "not_json", "raw": text}
         except Exception as e:
             return {"error": "exception", "message": str(e)}
