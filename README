@@ -1,9 +1,34 @@
-运行前注意：
+CVE Cross-Scope Bug Detection Pipeline
 
-需要配置环境变量
-export OPENAI_API_KEY="sk-xxx"
-export OPENAI_BASE_URL="https://chatbox.isrc.ac.cn/api/"
+This project analyzes Linux CVE announcements to detect cross-scope bugs.
 
-以及下载一些python库
+## Setup
 
-入口为pipeline.py
+1. Set environment variables:
+   export OPENAI_API_KEY="your-api-key"
+   export OPENAI_BASE_URL="https://your-endpoint/api/"  # optional
+
+2. Install dependencies (if any)
+
+3. Ensure ctags is installed: `sudo apt install universal-ctags` or equivalent
+
+## Usage
+
+Run the pipeline: `python pipeline.py`
+
+The pipeline will:
+- Fetch emails sequentially from linux-cve-announce/git/
+- Use LLM to analyze for potential cross-domain bugs and extract call stacks/versions
+- Checkout corresponding kernel versions
+- Extract function definitions
+- Judge for cross-scope errors
+- Append titles of cross-scope bugs to results.txt
+
+## Files
+
+- fetch.py: Email fetching utilities
+- llm_safe.py: LLM interaction
+- pipeline.py: Main workflow
+- source_manager.py: Kernel source management
+- extractor.py: Function extraction
+- cve.py: Version parsing utilities

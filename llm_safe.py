@@ -7,7 +7,7 @@ from typing import Optional
 
 SYSTEM_MESSAGE = """
 You are a professional Linux developer and Linux analyzer.
-Respond with strict JSON as requested in the prompt. No extra commentary.
+Respond strictly as requested in the prompt. No extra commentary.
 """
 
 class LLMQuery:
@@ -22,9 +22,9 @@ class LLMQuery:
             self.client = OpenAI(api_key=api_key, base_url=base_url)
         else:
             self.client = OpenAI(api_key=api_key)
-        self.max_tokens = 4096
+        self.max_tokens = 8192
 
-    def analyze_by_LLM(self, content: str, prompt_prefix: str = "", max_allowed_tokens_for_content: int = 3000) -> Optional[dict]:
+    def analyze_by_LLM(self, content: str, prompt_prefix: str = "", max_allowed_tokens_for_content: int = 6000) -> str:
         """
         发送分析请求，期望 LLM 返回 JSON。会尝试 parse JSON 并返回 dict。
         对 content 做简单截断（以字符数为近似）。
@@ -35,27 +35,62 @@ class LLMQuery:
         user_message = prompt_prefix + "\n\n" + content
         try:
             resp = self.client.chat.completions.create(
-                model="DeepSeek-V3.2-Instruct",
+                model="GLM-5",
                 messages=[
                     {"role": "system", "content": SYSTEM_MESSAGE},
                     {"role": "user", "content": user_message},
                 ],
-                max_tokens=4096,
+                max_tokens=self.max_tokens,
                 temperature=0.7,
                 top_p=1,
                 frequency_penalty=0,
                 presence_penalty=0,
             )
-            text = resp.choices[0].message.content.strip()
-            # 尝试把 text 当成 JSON parse
-            try:
-                parsed = json.loads(text)
-                return parsed
-            except json.JSONDecodeError:
-                try:
-                    parsed = ast.literal_eval(text)
-                    return parsed
-                except Exception:
-                    return {"error": "not_json", "raw": text}
+            return resp.choices[0].message.content.strip()
         except Exception as e:
-            return {"error": "exception", "message": str(e)}
+            return ""
+
+    def initial_analysis(self, title_body: str) -> Optional[dict]:
+        """
+        第一个LLM调用：分析邮件标题和正文，判断是否有效（可能为跨域BUG），提取调用栈，提取引入版本。
+        返回JSON: {"is_valid": bool, "call_stacks": [[str]], "introduced_version": str}
+        """
+        prompt = """
+            Analyze the following email title and body from a Linux CVE announcement.
+            Determine if this email contains call stacks that indicate a cross-scope bug (e.g., a race condition between two paths).
+            If there are call stacks, extract them as separate arrays of function names.
+            Extract the version where the bug was introduced, typically in format like "Issue introduced in X.Y".
+
+            Return only JSON in this format:
+            {
+                "is_valid": true/false,
+                "call_stacks": [["func1", "func2", ...], ["func3", "func4", ...]],
+                "introduced_version": "X.Y..."
+            }
+            Be aware only responde with '{' started and '}' ended.
+            If no call stacks or version found, use empty arrays or empty string.
+            """
+        return self.analyze_by_LLM(title_body, prompt_prefix=prompt)
+
+    def cross_scope_judgment(self, func_defs: str) -> str:
+        """
+        第二个LLM调用：给出函数定义，判断是否涉及cross-scope。
+        标准：产生错误的调用路径里，有一个内核资源在某子模块的函数里被写，而在另一个不同的子模块的函数里被读。由于该内核资源的值错误，导致出错。
+        如果找不到，则不必追求是内核资源的值导致错误的发生；
+        如果还找不到，则内核资源不必限制为全局变量。
+        回答yes/no only.
+        """
+        prompt = f"""
+            Given the following function definitions from the Linux kernel source, which are extracted from a CVE announcement email:
+
+            {func_defs}
+
+            Does this involve a cross-scope error according to these criteria:
+            - In the error-causing call path, a kernel resource is written in a function of one module and read in a function of a different module, causing the error due to incorrect value.
+            - If not found, do not require the kernel resource value to cause the error.
+            - If still not found, kernel resource not limited to global variables.
+
+            Answer only 'yes' or 'no', no extra commentary.
+            """
+        result = self.analyze_by_LLM(func_defs, prompt_prefix=prompt)
+        return result.lower() if result else "no"
