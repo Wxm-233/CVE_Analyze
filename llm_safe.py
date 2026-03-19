@@ -11,31 +11,26 @@ Respond strictly as requested in the prompt. No extra commentary.
 """
 
 class LLMQuery:
-    def __init__(self, api_key_env="OPENAI_API_KEY", base_url=None):
+    def __init__(self, api_key_env="OPENAI_API_KEY", base_url="https://chatbox.isrc.ac.cn/api/"):
         api_key = os.environ.get(api_key_env)
         if not api_key:
             raise EnvironmentError(f"Please set environment variable {api_key_env} with your API key.")
-        # 通过环境变量 OPENAI_BASE_URL 提供内部 base_url
-        base_url = base_url or os.environ.get("OPENAI_BASE_URL", None)
         # 初始化客户端
-        if base_url:
-            self.client = OpenAI(api_key=api_key, base_url=base_url)
-        else:
-            self.client = OpenAI(api_key=api_key)
-        self.max_tokens = 8192
+        self.client = OpenAI(api_key=api_key, base_url=base_url)
+        self.max_tokens = 16384
 
-    def analyze_by_LLM(self, content: str, prompt_prefix: str = "", max_allowed_tokens_for_content: int = 6000) -> str:
+    def analyze_by_LLM(self, content: str, prompt_prefix: str = "", max_allowed_tokens_for_content: int = 12000) -> str:
         """
         发送分析请求，期望 LLM 返回 JSON。会尝试 parse JSON 并返回 dict。
         对 content 做简单截断（以字符数为近似）。
         """
         # 截断 content（简单策略：字符截断）
-        if len(content) > max_allowed_tokens_for_content:
-            content = content[:max_allowed_tokens_for_content] + "\n\n/* TRUNCATED FOR TOKEN LIMIT */\n"
+        # if len(content) > max_allowed_tokens_for_content:
+        #     content = content[:max_allowed_tokens_for_content] + "\n\n/* TRUNCATED FOR TOKEN LIMIT */\n"
         user_message = prompt_prefix + "\n\n" + content
         try:
             resp = self.client.chat.completions.create(
-                model="GLM-5",
+                model="DeepSeek-V3.2-Instruct",
                 messages=[
                     {"role": "system", "content": SYSTEM_MESSAGE},
                     {"role": "user", "content": user_message},
@@ -58,6 +53,7 @@ class LLMQuery:
         prompt = """
             Analyze the following email title and body from a Linux CVE announcement.
             Determine if this email contains call stacks that indicate a cross-scope bug (e.g., a race condition between two paths).
+            We say valid for softer standard: if you can find any call stack, even if it's not certain, say it's valid.
             If there are call stacks, extract them as separate arrays of function names.
             Extract the version where the bug was introduced, typically in format like "Issue introduced in X.Y".
 
@@ -72,7 +68,7 @@ class LLMQuery:
             """
         return self.analyze_by_LLM(title_body, prompt_prefix=prompt)
 
-    def cross_scope_judgment(self, func_defs: str) -> str:
+    def cross_scope_judgment(self, func_defs: str, mail_content: str) -> str:
         """
         第二个LLM调用：给出函数定义，判断是否涉及cross-scope。
         标准：产生错误的调用路径里，有一个内核资源在某子模块的函数里被写，而在另一个不同的子模块的函数里被读。由于该内核资源的值错误，导致出错。
@@ -85,6 +81,10 @@ class LLMQuery:
 
             {func_defs}
 
+            And the following email content:
+
+            {mail_content}
+
             Does this involve a cross-scope error according to these criteria:
             - In the error-causing call path, a kernel resource is written in a function of one module and read in a function of a different module, causing the error due to incorrect value.
             - If not found, do not require the kernel resource value to cause the error.
@@ -92,5 +92,5 @@ class LLMQuery:
 
             Answer only 'yes' or 'no', no extra commentary.
             """
-        result = self.analyze_by_LLM(func_defs, prompt_prefix=prompt)
+        result = self.analyze_by_LLM('', prompt_prefix=prompt)
         return result.lower() if result else "no"

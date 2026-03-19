@@ -6,7 +6,6 @@ This project analyzes Linux CVE announcements to detect cross-scope bugs.
 
 1. Set environment variables:
    export OPENAI_API_KEY="your-api-key"
-   export OPENAI_BASE_URL="https://your-endpoint/api/"  # optional
 
 2. Install dependencies (if any)
 
@@ -32,3 +31,4 @@ The pipeline will:
 - source_manager.py: Kernel source management
 - extractor.py: Function extraction
 - cve.py: Version parsing utilities
+- CVE-2026-23267: example mail

@@ -8,7 +8,7 @@ KERNEL_MIRROR = os.environ.get("KERNEL_MIRROR", "https://git.kernel.org/pub/scm/
 
 def ensure_kernel_checkout(version: str, outdir: str = "linux_src") -> Optional[str]:
     """
-    尝试获取指定版本的 Linux 源码(浅克隆特定 tag/branch)。
+    尝试获取指定版本的 Linux 源码，使用主要版本共享基础仓库，小版本使用 worktree。
     返回源码路径(路径字符串)或者 None(失败)。
     """
     p = Path(outdir)
@@ -16,25 +16,27 @@ def ensure_kernel_checkout(version: str, outdir: str = "linux_src") -> Optional[
     dest = p / f"linux-{version}"
     if dest.exists():
         return str(dest)
+    
+    major = version.split('.')[0]
+    base_dest = p / f"linux-{major}"
+    
+    if not base_dest.exists():
+        try:
+            # Clone base repo for major version with shallow depth first
+            cmd = ["git", "clone", "--depth", "1", KERNEL_MIRROR, str(base_dest)]
+            subprocess.check_call(cmd)
+            # Fetch all tags and unshallow to get full history
+            subprocess.check_call(["git", "-C", str(base_dest), "fetch", "--tags", "--unshallow"])
+        except subprocess.CalledProcessError:
+            return None
+    
     try:
-        # 注意：网络需要能访问 git.kernel.org；失败时用户可手动准备源码
-        cmd = ["git", "clone", "--depth", "1", "--branch", f"v{version}", KERNEL_MIRROR, str(dest)]
-        subprocess.check_call(cmd)
+        # Create worktree for specific version
+        rel_path = f"../linux-{version}"
+        subprocess.check_call(["git", "-C", str(base_dest), "worktree", "add", rel_path, f"v{version}"])
         return str(dest)
     except subprocess.CalledProcessError:
-        # fallback: try to clone generic repo and checkout tag (slower)
-        try:
-            tmpdest = p / "linux-latest"
-            if not tmpdest.exists():
-                subprocess.check_call(["git", "clone", "--depth", "1", KERNEL_MIRROR, str(tmpdest)])
-            # try checkout
-            subprocess.check_call(["git", "-C", str(tmpdest), "fetch", "--tags"])
-            subprocess.check_call(["git", "-C", str(tmpdest), "checkout", f"v{version}"])
-            alt = p / f"linux-{version}"
-            subprocess.check_call(["mv", str(tmpdest), str(alt)])
-            return str(alt)
-        except Exception:
-            return None
+        return None
 
 def run_ctags(src_path: str, tags_file: str = "tags"):
     """在 src_path 下运行 ctags(需要系统安装 exuberant-ctags 或 universal-ctags)"""
