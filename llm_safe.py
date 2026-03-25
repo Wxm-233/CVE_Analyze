@@ -17,7 +17,7 @@ class LLMQuery:
             raise EnvironmentError(f"Please set environment variable {api_key_env} with your API key.")
         # 初始化客户端
         self.client = OpenAI(api_key=api_key, base_url=base_url)
-        self.max_tokens = 16384
+        self.max_tokens = 65536
 
     def analyze_by_LLM(self, content: str, prompt_prefix: str = "", max_allowed_tokens_for_content: int = 12000) -> str:
         """
@@ -90,7 +90,13 @@ class LLMQuery:
             - If not found, do not require the kernel resource value to cause the error.
             - If still not found, kernel resource not limited to global variables.
 
-            Answer only 'yes' or 'no', no extra commentary.
+            Return only JSON in this format:
+            {{
+                "is_cross_scope": true/false,
+                "conflicting_resources": ["resource1", "resource2", ...]
+            }}
+            Be aware only respond with '{{' started and '}}' ended.
+            If no conflicting resources found, use empty array.
             """
         result = self.analyze_by_LLM('', prompt_prefix=prompt)
-        return result.lower() if result else "no"
+        return result

@@ -1,5 +1,6 @@
 __pycache__
 .DS_Store
 linux_src
-test_results.txt
 .vscode
+results
+results_reverse

@@ -7,27 +7,25 @@ from cve import parse_introduced_version
 from llm_safe import LLMQuery
 import json
 import ast
+import re
 import concurrent.futures
 
 def main():
     emails = get_emails_sequentially()
     llm = LLMQuery()
 
-    results_file = "results.txt"
-    with open(results_file, 'a', encoding='utf-8') as f:
-        f.write("# Cross-scope bug titles\n")
+    results_folder = "results_reverse"
+    os.makedirs(results_folder, exist_ok=True)
 
-    for email in emails:
-        analyze_email(email, llm, results_file)
+    for email in emails[::-1]:  # 从最新邮件开始分析
+        analyze_email(email, llm, results_folder)
 
-def analyze_email(email, llm, results_file):
+def analyze_email(email, llm, results_folder):
     title = email['title']
     full_content = email['full_content']
 
     # 第一个LLM：初始分析
     analysis = llm.initial_analysis(full_content)
-
-    print("Analysis:"+str(analysis))
 
     if not analysis:
         print(f"Skipping email due to LLM error: {title}")
@@ -86,10 +84,49 @@ def analyze_email(email, llm, results_file):
 
     # 第二个LLM：cross-scope判断
     judgment = llm.cross_scope_judgment(func_defs_str, full_content)
-    if judgment == "yes":
-        with open(results_file, 'a', encoding='utf-8') as f:
-            f.write(title + "\n")
-        print(f"Added to results: {title}")
+
+    if not judgment:
+        print(f"LLM failed to give judgment for: {title}")
+        return
+    
+    try:
+        judgment_parsed = json.loads(judgment)
+        is_cross_scope = judgment_parsed.get("is_cross_scope", False)
+    except json.JSONDecodeError:
+        print(f"Failed to parse LLM judgment for: {title}")
+        return
+
+    if is_cross_scope:
+        result = {
+            "title": title,
+            "content": full_content,
+            "introduced_version": introduced_version,
+            "call_stacks": call_stacks,
+            "functions": func_defs,
+            "conflicting_resources": judgment_parsed.get("conflicting_resources", [])
+        }
+        cve_match = re.search(r'CVE-\d{4}-\d+', title)
+        cve_id = cve_match.group(0) if cve_match else "unknown"
+        result_file = os.path.join(results_folder, f"{cve_id}_result.txt")
+        with open(result_file, 'w', encoding='utf-8') as f:
+            f.write(f"Title: {title}\n\n")
+            f.write(f"Introduced Version: {introduced_version}\n\n")
+            f.write("Content:\n")
+            f.write(full_content + "\n\n")
+            f.write("Call Stacks:\n")
+            for i, stack in enumerate(call_stacks):
+                f.write(f"Stack {i}:\n")
+                for func in stack:
+                    f.write(f"  {func}\n")
+                f.write("\n")
+            f.write("Functions:\n")
+            for func in func_defs:
+                f.write(func + "\n")
+            f.write("\nConflicting Resources:\n")
+            for resource in judgment_parsed.get("conflicting_resources", []):
+                f.write(f"  {resource}\n")
+
+        print(f"Cross-scope bug found and saved for: {title}")
 
 def test():
     email_file = "CVE-2026-23267"
@@ -102,7 +139,7 @@ def test():
     }
 
     llm = LLMQuery()
-    analyze_email(email_test, llm, "test_results.txt")
+    analyze_email(email_test, llm, "results")
 
 if __name__ == "__main__":
     main()
